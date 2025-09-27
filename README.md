@@ -1,3 +1,2 @@
 ﻿# KotlinCompose-profilecard
-
-<img width="717" height="1555" alt="profilecard" src="https://github.com/user-attachments/assets/295a7cb7-0140-4e47-b480-fff96a262723" />
+<img width="477" height="1040" alt="Снимок экрана 2025-09-27 112232" src="https://github.com/user-attachments/assets/b07986b3-2522-4c21-8e1f-6d92a0f67560" />
