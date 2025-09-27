@@ -20,6 +20,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +31,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 import com.example.profile.ui.theme.ProfileTheme
+import androidx.compose.animation.animateColorAsState
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,7 +41,7 @@ class MainActivity : ComponentActivity() {
             ProfileTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Greeting(
-                        name = "Android",
+                        name = "Dilmagambet Nurzhigit",
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -49,6 +52,17 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun Greeting(name: String, modifier: Modifier = Modifier) {
+    var isFollowing by rememberSaveable { mutableStateOf(false)}
+    var followText by rememberSaveable { mutableStateOf("Follow") }
+    var count by rememberSaveable { mutableStateOf(0) }
+    val buttonColor by animateColorAsState(
+        targetValue = if (isFollowing) Color.Black else Color.White,
+        label = "buttonColor"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (isFollowing) Color.White else Color.Black,
+        label = "contentColor"
+    )
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -74,20 +88,37 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 
             )
             Spacer(Modifier.height(12.dp))
-            Text(name, fontSize = 22.sp, color = White)
+            Text(name,
+                fontSize = 22.sp,
+                color = White
+            )
+            Text(text ="subscribers: "+""+ count.toString(),
+                fontSize = 15.sp,
+                color = Color(red = 150, green = 150, blue = 150)
+            )
             Text(
                 "Computer Science | BACKEND/ROBOTICS",
                 modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
                 color = White
             )
             Button(
-                onClick = {},
+                onClick = {
+                    if(isFollowing == false){
+                        isFollowing = true
+                        followText = "UnFollow"
+                        count++
+                    }else{
+                        isFollowing = false
+                        followText = "Follow"
+                        count--
+                    }
+                },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(red = 40, green = 40, blue = 40),
-                    contentColor = Color.White
+                    containerColor = buttonColor,
+                    contentColor = contentColor
                 )
             ) {
-                Text("Follow")
+                Text(followText)
             }
         }
     }
