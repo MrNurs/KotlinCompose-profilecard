@@ -5,32 +5,40 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-
+import com.example.profile.data.UserRepository
+import com.example.profile.data.local.UserEntity
+import kotlinx.coroutines.launch
 
 @Composable
-fun EditProfile(id: String, modifier: Modifier = Modifier, backToProfile: (String) -> Unit = {} ) {
-    var user = UserRepository.getUser(id)
-    var name by remember { mutableStateOf(TextFieldValue(user?.name ?: "")) }
-    var bio by remember { mutableStateOf(TextFieldValue(user?.bio ?: "")) }
+fun EditProfile(
+    id: String,
+    repo: UserRepository,
+    backToProfile: (String) -> Unit
+) {
+    var user by remember { mutableStateOf<UserEntity?>(null) }
 
+    LaunchedEffect(id) {
+        user = repo.getUser(id)
+    }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(text = "Edit Profile", style = MaterialTheme.typography.headlineMedium)
+    var name by remember { mutableStateOf("") }
+    var bio by remember { mutableStateOf("") }
+
+    LaunchedEffect(user) {
+        user?.let {
+            name = it.name
+            bio = it.bio
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
 
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
             label = { Text("Name") },
-            singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -41,18 +49,25 @@ fun EditProfile(id: String, modifier: Modifier = Modifier, backToProfile: (Strin
             modifier = Modifier.fillMaxWidth()
         )
 
+        val scope = rememberCoroutineScope()
+
         Button(
             onClick = {
-                if (user != null) {
-                    UserRepository.updateUser(
-                        user.copy(name = name.text, bio = bio.text)
+                scope.launch {
+                    repo.upsert(
+                        UserEntity(
+                            id = id,
+                            name = name,
+                            bio = bio
+                        )
                     )
+                    backToProfile(id)
                 }
-                backToProfile(id)
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Save Changes")
+            Text("Save")
         }
+
     }
 }
