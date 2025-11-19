@@ -10,12 +10,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.room.Room
-import androidx.lifecycle.lifecycleScope
 import com.example.profile.data.UserRepository
-import com.example.profile.data.local.AppDatabase
-import com.example.profile.data.local.UserEntity
 import com.example.profile.ui.theme.ProfileTheme
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
@@ -33,44 +32,21 @@ sealed class Screen(val route: String) {
     }
 }
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
-    private lateinit var repo: UserRepository
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-
-        val db = Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java,
-            "app.db"
-        ).build()
-
-        repo = UserRepository(db.userDao())
-
-        lifecycleScope.launch {
-            if (repo.getUser("me") == null) {
-                repo.upsert(
-                    UserEntity(
-                        id = "me",
-                        name = "Dilmagambet Nurzhigit",
-                        bio = "Computer Science | BACKEND/ROBOTICS"
-                    )
-                )
-            }
-        }
-
         setContent {
             ProfileTheme {
-                AppNav(repo)
+                AppNav()
             }
         }
     }
 }
 
+
 @Composable
-fun AppNav(repo: UserRepository) {
+fun AppNav() {
     val myID = "me"
     val nav = rememberNavController()
 
@@ -83,7 +59,6 @@ fun AppNav(repo: UserRepository) {
         composable(Screen.MyProfile.route) {
             ProfileScreen(
                 id = myID,
-                repo = repo,
                 onEdit = { userId -> nav.navigate(Screen.EditProfile.path(userId)) }
             )
         }
@@ -97,7 +72,6 @@ fun AppNav(repo: UserRepository) {
             val id = backStack.arguments?.getString(Screen.EditProfile.ARG)!!
             EditProfile(
                 id = id,
-                repo = repo,
                 backToProfile = { nav.navigateUp() }
             )
         }
