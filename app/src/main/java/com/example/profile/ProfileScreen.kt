@@ -1,35 +1,29 @@
 package com.example.profile
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.animateColorAsState
-import androidx.lifecycle.ViewModel
-import androidx.compose.runtime.*
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Color.Companion.White
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import com.example.profile.ui.theme.ProfileTheme
 import kotlinx.coroutines.launch
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.Tab
 
 data class Follower(val name: String, val isFollowing: Boolean)
 
@@ -47,7 +41,7 @@ fun ProfileScreen(
     id: String,
     modifier: Modifier = Modifier,
     onEdit: (String) -> Unit = {},
-    viewModel: ProfileViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    viewModel: ProfileViewModel = hiltViewModel()
 ) {
     val user by viewModel.user.collectAsState()
 
@@ -55,18 +49,24 @@ fun ProfileScreen(
         viewModel.load(id)
     }
 
-    val safeUser = user ?: User(
-        id = "null",
-        name = "unknown",
-        bio = "",
-        followers = mutableListOf("peter", "gosling")
-    )
+    // Shimmer while loading
+    if (user == null) {
+        ProfileShimmer()
+        return
+    }
+
+    val safeUser = user!!
     val name = safeUser.name
 
-    // --- Tabs ---
     var selectedTab by rememberSaveable { mutableStateOf(0) }
+    var isFollowing by rememberSaveable { mutableStateOf(false) }
+    var followText by rememberSaveable { mutableStateOf("Follow") }
+    var showUnfollowDialog by rememberSaveable { mutableStateOf(false) }
+    var followersExpanded by rememberSaveable { mutableStateOf(true) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    // --- Feed posts ---
+    // Posts
     val posts = remember {
         mutableStateListOf(
             Post(1, name, "Good", likes = 5, comments = 2),
@@ -75,132 +75,139 @@ fun ProfileScreen(
         )
     }
 
-    // --- Follow / followers ---
-    var isFollowing by rememberSaveable { mutableStateOf(false) }
-    var followText by rememberSaveable { mutableStateOf("Follow") }
-    var showUnfollowDialog by rememberSaveable { mutableStateOf(false) }
-    var followersExpanded by rememberSaveable { mutableStateOf(true) }
-
-    val buttonColor by animateColorAsState(
-        targetValue = if (isFollowing) Color.Black else Color.White,
-        label = "buttonColor"
-    )
-    val contentColor by animateColorAsState(
-        targetValue = if (isFollowing) Color.White else Color.Black,
-        label = "contentColor"
-    )
-
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-
+    // Followers
     val followers = remember {
         mutableStateListOf(
             Follower("Rayan Gosling", true),
-            Follower("Iam Legend", true),
             Follower("Peter Parker", true),
             Follower("570tenge", true),
             Follower("Daniyar Daraboz", true),
-            Follower("Megaknight", true),
             Follower("CJ", true),
-            Follower("Trevor", true),
-            Follower("Khan", true),
-            Follower("John Pork", true),
+            Follower("Megaknight", true),
         )
     }
 
+    // Counter VM
     val factory = CounterViewModelFactory(followers.size)
-    val countVM: CounterViewModel = viewModel(factory = factory)
+    val countVM: CounterViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = factory)
 
-    LaunchedEffect(isFollowing) {
-        followText = if (isFollowing) "Unfollow" else "Follow"
-    }
+    LaunchedEffect(isFollowing) { followText = if (isFollowing) "Unfollow" else "Follow" }
+
+    // Animations
+    val avatarScale by animateFloatAsState(
+        targetValue = if (isFollowing) 1.2f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.25f,
+            stiffness = 50f
+        )
+    )
+
+    val onlinePulse by animateFloatAsState(
+        targetValue = 1.4f,
+        animationSpec = infiniteRepeatable(
+            tween(700),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+
+    var statsVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { statsVisible = true }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Profile Screen", color = Color.White) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF1A1A1A)
-                )
+                colors = TopAppBarDefaults.topAppBarColors(Color(0xFF1A1A1A))
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color(0xFF0C0C0C)
-    ) { innerPadding ->
+    ) { pad ->
 
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(pad)
         ) {
 
-            // ---------- TAB ROW ----------
             TabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = Color(0xFF101010)
             ) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("Profile") }
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("Feed") }
-                )
+                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Profile") })
+                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Feed") })
             }
 
-            // ---------- TAB CONTENT ----------
             when (selectedTab) {
+
+                // PROFILE TAB
                 0 -> {
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color(red = 12, green = 12, blue = 12)),
+                            .fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-
                         Card(
-                            modifier = Modifier
-                                .width(350.dp)
-                                .wrapContentHeight(),
+                            modifier = Modifier.width(350.dp),
                             shape = RoundedCornerShape(20.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF101010))
+                            colors = CardDefaults.cardColors(Color(0xFF101010)),
+                            elevation = CardDefaults.cardElevation(10.dp)
                         ) {
-
                             Column(
                                 modifier = Modifier
-                                    .width(350.dp)
-                                    .background(Color(red = 10, green = 10, blue = 10)),
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF0A0A0A)),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
+
                                 Spacer(Modifier.height(24.dp))
 
+                                // AVATAR WITH ANIMATION
                                 Image(
                                     painter = painterResource(id = R.drawable.literallyme),
-                                    contentDescription = "Avatar",
+                                    contentDescription = null,
                                     modifier = Modifier
                                         .size(96.dp)
+                                        .graphicsLayer(scaleX = avatarScale, scaleY = avatarScale)
                                         .clip(CircleShape)
                                 )
 
-                                Spacer(Modifier.height(12.dp))
-                                Text(name, fontSize = 22.sp, color = White)
+                                Spacer(Modifier.height(6.dp))
 
-                                Text(
-                                    text = "subscribers: ${countVM.count}",
-                                    fontSize = 15.sp,
-                                    color = Color(150, 150, 150)
+                                // ONLINE INDICATOR
+                                Box(
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .graphicsLayer(
+                                            scaleX = onlinePulse,
+                                            scaleY = onlinePulse
+                                        )
+                                        .background(Color(0xFF4CAF50), CircleShape)
                                 )
+
+                                Spacer(Modifier.height(12.dp))
+
+                                Text(name, fontSize = 22.sp, color = Color.White)
+
+                                AnimatedVisibility(
+                                    visible = statsVisible,
+                                    enter = fadeIn(tween(700))
+                                ) {
+                                    Text(
+                                        "subscribers: ${countVM.count}",
+                                        fontSize = 15.sp,
+                                        color = Color.LightGray,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
 
                                 Text(
                                     safeUser.bio,
-                                    modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
-                                    color = White
+                                    color = Color.White,
+                                    modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
                                 )
 
+                                // FOLLOW BUTTONS
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -210,27 +217,15 @@ fun ProfileScreen(
                                             if (!isFollowing) {
                                                 isFollowing = true
                                                 countVM.increment()
-                                                scope.launch {
-                                                    snackbarHostState.showSnackbar("You followed $name!")
-                                                }
-                                            } else {
-                                                showUnfollowDialog = true
-                                            }
-                                        },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = buttonColor,
-                                            contentColor = contentColor
-                                        )
-                                    ) {
-                                        Text(followText)
-                                    }
+                                                scope.launch { snackbarHostState.showSnackbar("You followed $name!") }
+                                            } else showUnfollowDialog = true
+                                        }
+                                    ) { Text(followText) }
 
                                     OutlinedButton(onClick = {
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar("Messaging $name…")
-                                        }
+                                        scope.launch { snackbarHostState.showSnackbar("Messaging $name…") }
                                     }) {
-                                        Text("Message", color = White)
+                                        Text("Message", color = Color.White)
                                     }
                                 }
 
@@ -240,15 +235,15 @@ fun ProfileScreen(
 
                                 Spacer(Modifier.height(20.dp))
 
+                                // FOLLOWERS
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("Followers", color = White, fontSize = 18.sp)
-                                    IconButton(onClick = { followersExpanded = !followersExpanded }) { }
+                                    Text("Followers", color = Color.White, fontSize = 18.sp)
+                                    IconButton(onClick = { followersExpanded = !followersExpanded }) {}
                                 }
 
                                 AnimatedVisibility(
@@ -256,21 +251,16 @@ fun ProfileScreen(
                                     enter = expandVertically(),
                                     exit = shrinkVertically()
                                 ) {
-
-                                    val listState = rememberLazyListState()
-
                                     LazyColumn(
-                                        state = listState,
-                                        verticalArrangement = Arrangement.spacedBy(8.dp),
                                         modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(320.dp)
-                                            .padding(horizontal = 12.dp)
+                                            .height(300.dp)
+                                            .padding(horizontal = 12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        items(followers, key = { it.name + it.isFollowing }) { follower ->
-                                            FollowerRow(
+                                        items(followers, key = { it.name }) { follower ->
+                                            AnimatedFollowerRow(
                                                 follower = follower,
-                                                onUnfollow = {
+                                                onRemove = {
                                                     followers.remove(follower)
                                                     countVM.decrement()
                                                     scope.launch {
@@ -287,96 +277,151 @@ fun ProfileScreen(
                         }
                     }
                 }
-                1 -> {
-                    FeedTabContent(posts = posts)
-                }
+
+                // FEED TAB
+                1 -> FeedTabContentAnimated(posts)
             }
         }
     }
 
+    // CONFIRM DIALOG
     if (showUnfollowDialog) {
         AlertDialog(
             onDismissRequest = { showUnfollowDialog = false },
             title = { Text("Unfollow $name?") },
-            text = { Text("Are you sure you want to unfollow this user?") },
             confirmButton = {
                 TextButton(onClick = {
-                    if (isFollowing) {
-                        isFollowing = false
-                        countVM.decrement()
-                    }
+                    isFollowing = false
+                    countVM.decrement()
                     showUnfollowDialog = false
-                }) {
-                    Text("Yes")
-                }
+                }) { Text("Yes") }
             },
-            dismissButton = {
-                TextButton(onClick = { showUnfollowDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-            containerColor = Color(0xFF1E1E1E),
-            titleContentColor = Color.White,
-            textContentColor = Color.LightGray
+            dismissButton = { TextButton(onClick = { showUnfollowDialog = false }) { Text("Cancel") } },
+            containerColor = Color(0xFF1E1E1E)
         )
     }
 }
 
-// ---------------- VIEWMODELS / HELPERS -----------------
+// SHIMMER
 
-class CounterViewModel(private val number: Int) : ViewModel() {
-    var count by mutableStateOf(number)
-        private set
+@Composable
+fun ProfileShimmer() {
+    val shimmer = rememberInfiniteTransition()
+    val alpha by shimmer.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            tween(600),
+            RepeatMode.Reverse
+        )
+    )
 
-    fun increment() { count++ }
-    fun decrement() { count-- }
-}
-
-class CounterViewModelFactory(private val initialCount: Int) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(CounterViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return CounterViewModel(initialCount) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            Modifier
+                .size(96.dp)
+                .clip(CircleShape)
+                .background(Color.Gray.copy(alpha))
+        )
+        Spacer(Modifier.height(16.dp))
+        Box(
+            Modifier
+                .height(20.dp)
+                .width(120.dp)
+                .background(Color.Gray.copy(alpha), RoundedCornerShape(8.dp))
+        )
     }
 }
 
+
+
+@Composable
+fun AnimatedFollowerRow(
+    follower: Follower,
+    onRemove: () -> Unit
+) {
+    var isVisible by remember { mutableStateOf(true) }
+
+    val alpha by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = tween(durationMillis = 500),
+        finishedListener = {
+            if (!isVisible) onRemove()
+        }
+    )
+
+    val scale by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0.7f,
+        animationSpec = tween(500)
+    )
+
+    val offset by animateDpAsState(
+        targetValue = if (isVisible) 0.dp else 50.dp,
+        animationSpec = tween(500)
+    )
+
+    if (alpha <= 0f) return
+
+    FollowerRow(
+        follower = follower,
+        onUnfollow = {
+            isVisible = false
+        },
+        modifier = Modifier
+            .graphicsLayer(
+                alpha = alpha,
+                scaleX = scale,
+                scaleY = scale
+            )
+            .offset(x = offset)
+    )
+}
+
+// FOLLOWER ROW
 @Composable
 fun FollowerRow(
     follower: Follower,
-    onUnfollow: () -> Unit
+    onUnfollow: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF181818)),
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
-                .padding(12.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = follower.name,
                 color = Color.White,
-                fontSize = 16.sp
+                fontSize = 16.sp,
+                modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onUnfollow) {
+
+            TextButton(
+                onClick = onUnfollow,
+                contentPadding = PaddingValues(0.dp)
+            ) {
                 Text("Remove", color = Color(0xFFBBBBBB))
             }
         }
     }
 }
 
-// ------------------ FEED TAB ------------------
 
+// FEED WITH SLIDE ANIMATION
 @Composable
-fun FeedTabContent(
-    posts: List<Post>
-) {
+fun FeedTabContentAnimated(posts: List<Post>) {
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -384,10 +429,24 @@ fun FeedTabContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(posts, key = { it.id }) { post ->
+
+            var startOffset by remember { mutableStateOf(true) }
+            LaunchedEffect(Unit) { startOffset = false }
+
+            val offsetX by animateDpAsState(
+                targetValue = if (startOffset) 200.dp else 0.dp,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            )
+
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF181818)),
-                shape = RoundedCornerShape(16.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset(x = offsetX),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(Color(0xFF181818))
             ) {
                 Column(
                     modifier = Modifier
@@ -396,8 +455,7 @@ fun FeedTabContent(
                 ) {
                     Text(post.author, color = Color.White, fontSize = 16.sp)
                     Spacer(Modifier.height(4.dp))
-                    Text(post.text, color = Color(0xFFDDDDDD), fontSize = 14.sp)
-                    Spacer(Modifier.height(8.dp))
+                    Text(post.text, color = Color.LightGray, fontSize = 14.sp)
 
                     var likes by remember { mutableStateOf(post.likes) }
                     var comments by remember { mutableStateOf(post.comments) }
@@ -416,5 +474,24 @@ fun FeedTabContent(
                 }
             }
         }
+    }
+}
+// VIEWMODELS / HELPERS
+
+class CounterViewModel(private val number: Int) : ViewModel() {
+    var count by mutableStateOf(number)
+        private set
+
+    fun increment() { count++ }
+    fun decrement() { count-- }
+}
+
+class CounterViewModelFactory(private val initialCount: Int) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(CounterViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return CounterViewModel(initialCount) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
