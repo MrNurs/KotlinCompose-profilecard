@@ -2,7 +2,6 @@ package com.example.profile
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,6 +23,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.layout.ContentScale
+
 
 data class Follower(val name: String, val isFollowing: Boolean)
 
@@ -43,12 +47,15 @@ fun ProfileScreen(
     onEdit: (String) -> Unit = {},
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
+
+    var recompositionCount by remember { mutableStateOf(0) }
+    SideEffect { recompositionCount++ }
+
     val user by viewModel.user.collectAsState()
 
     LaunchedEffect(id) {
         viewModel.load(id)
     }
-
     // Shimmer while loading
     if (user == null) {
         ProfileShimmer()
@@ -86,29 +93,18 @@ fun ProfileScreen(
             Follower("Megaknight", true),
         )
     }
-
     // Counter VM
     val factory = CounterViewModelFactory(followers.size)
-    val countVM: CounterViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = factory)
+    val countVM: CounterViewModel =
+        androidx.lifecycle.viewmodel.compose.viewModel(factory = factory)
 
-    LaunchedEffect(isFollowing) { followText = if (isFollowing) "Unfollow" else "Follow" }
+    val subscribersText by remember {
+        derivedStateOf { "subscribers: ${countVM.count}" }
+    }
 
-    // Animations
-    val avatarScale by animateFloatAsState(
-        targetValue = if (isFollowing) 1.2f else 1f,
-        animationSpec = spring(
-            dampingRatio = 0.25f,
-            stiffness = 50f
-        )
-    )
-
-    val onlinePulse by animateFloatAsState(
-        targetValue = 1.4f,
-        animationSpec = infiniteRepeatable(
-            tween(700),
-            repeatMode = RepeatMode.Reverse
-        )
-    )
+    LaunchedEffect(isFollowing) {
+        followText = if (isFollowing) "Unfollow" else "Follow"
+    }
 
     var statsVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { statsVisible = true }
@@ -134,9 +130,26 @@ fun ProfileScreen(
                 selectedTabIndex = selectedTab,
                 containerColor = Color(0xFF101010)
             ) {
-                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Profile") })
-                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Feed") })
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text("Profile") }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text("Feed") }
+                )
             }
+
+//            Text(
+//                text = "Recompositions: $recompositionCount",
+//                color = Color.Gray,
+//                fontSize = 12.sp,
+//                modifier = Modifier
+//                    .align(Alignment.CenterHorizontally)
+//                    .padding(top = 4.dp)
+//            )
 
             when (selectedTab) {
 
@@ -162,28 +175,7 @@ fun ProfileScreen(
 
                                 Spacer(Modifier.height(24.dp))
 
-                                // AVATAR WITH ANIMATION
-                                Image(
-                                    painter = painterResource(id = R.drawable.literallyme),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(96.dp)
-                                        .graphicsLayer(scaleX = avatarScale, scaleY = avatarScale)
-                                        .clip(CircleShape)
-                                )
-
-                                Spacer(Modifier.height(6.dp))
-
-                                // ONLINE INDICATOR
-                                Box(
-                                    modifier = Modifier
-                                        .size(14.dp)
-                                        .graphicsLayer(
-                                            scaleX = onlinePulse,
-                                            scaleY = onlinePulse
-                                        )
-                                        .background(Color(0xFF4CAF50), CircleShape)
-                                )
+                                AvatarWithStatus(isFollowing = isFollowing)
 
                                 Spacer(Modifier.height(12.dp))
 
@@ -194,7 +186,7 @@ fun ProfileScreen(
                                     enter = fadeIn(tween(700))
                                 ) {
                                     Text(
-                                        "subscribers: ${countVM.count}",
+                                        subscribersText,
                                         fontSize = 15.sp,
                                         color = Color.LightGray,
                                         modifier = Modifier.padding(top = 4.dp)
@@ -217,13 +209,17 @@ fun ProfileScreen(
                                             if (!isFollowing) {
                                                 isFollowing = true
                                                 countVM.increment()
-                                                scope.launch { snackbarHostState.showSnackbar("You followed $name!") }
+                                                scope.launch {
+                                                    snackbarHostState.showSnackbar("You followed $name!")
+                                                }
                                             } else showUnfollowDialog = true
                                         }
                                     ) { Text(followText) }
 
                                     OutlinedButton(onClick = {
-                                        scope.launch { snackbarHostState.showSnackbar("Messaging $name…") }
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Messaging $name…")
+                                        }
                                     }) {
                                         Text("Message", color = Color.White)
                                     }
@@ -296,7 +292,9 @@ fun ProfileScreen(
                     showUnfollowDialog = false
                 }) { Text("Yes") }
             },
-            dismissButton = { TextButton(onClick = { showUnfollowDialog = false }) { Text("Cancel") } },
+            dismissButton = {
+                TextButton(onClick = { showUnfollowDialog = false }) { Text("Cancel") }
+            },
             containerColor = Color(0xFF1E1E1E)
         )
     }
@@ -484,6 +482,73 @@ class CounterViewModel(private val number: Int) : ViewModel() {
 
     fun increment() { count++ }
     fun decrement() { count-- }
+}
+
+@Composable
+private fun AvatarWithStatus(
+    isFollowing: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+
+    val imageRequest = remember {
+        ImageRequest.Builder(context)
+            .data("https://media.desenio.com/site_images/68631e5292c536b9cc92b07c_1776830038_WB0125-5.jpg?auto=compress%2Cformat&fit=max&w=3840")
+            .crossfade(true)
+            .build()
+    }
+
+    val avatarScale by animateFloatAsState(
+        targetValue = if (isFollowing) 1.2f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.25f,
+            stiffness = 50f
+        ),
+        label = "avatarScale"
+    )
+
+    val infiniteTransition = rememberInfiniteTransition(label = "onlinePulseTransition")
+    val onlinePulse by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(700),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "onlinePulse"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+    ) {
+        AsyncImage(
+            model = imageRequest,
+            contentDescription = null,
+            placeholder = painterResource(id = R.drawable.literallyme),
+            error = painterResource(id = R.drawable.literallyme),
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(96.dp)
+                .graphicsLayer(
+                    scaleX = avatarScale,
+                    scaleY = avatarScale
+                )
+                .clip(CircleShape)
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        Box(
+            modifier = Modifier
+                .size(14.dp)
+                .graphicsLayer(
+                    scaleX = onlinePulse,
+                    scaleY = onlinePulse
+                )
+                .background(Color(0xFF4CAF50), CircleShape)
+        )
+    }
 }
 
 class CounterViewModelFactory(private val initialCount: Int) : ViewModelProvider.Factory {
